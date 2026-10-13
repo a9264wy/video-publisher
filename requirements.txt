@@ -1,0 +1,12 @@
+# 核心模块零依赖（仅使用 Python 标准库），直接可跑：
+#   python main.py scan
+#   python main.py publish --limit 3
+#
+# 下列依赖仅在选用对应后端时才需要。
+
+# --- 可选：视频号助手网页自动化后端（backend = channels_web）---
+# playwright>=1.40
+# 安装后还需下载浏览器内核：playwright install chromium
+
+# --- 可选：如需更顺手的 HTTP 客户端，可自行替换 openapi 后端内的 urllib ---
+# requests>=2.31

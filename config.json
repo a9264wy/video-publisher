@@ -1,0 +1,81 @@
+{
+  "source_dir": "H:\\去1qa\\少儿科普白版-20261013-20261013T083033Z-1-001\\少儿科普白版-20261013",
+
+  "dry_run": false,
+
+  "schedule": {
+    "enabled": true,
+    "time": "07:00",
+    "daily_count": 3,
+    "weekdays": [0, 1, 2, 3, 4, 5, 6],
+    "max_runtime_minutes": 60,
+    "jitter_seconds": 60
+  },
+
+  "publish": {
+    "backend": "channels_web",
+    "publish_mode": "scheduled",
+    "scheduled_daily_time": "08:00",
+    "min_lead_minutes": 30,
+    "max_retries": 2,
+    "retry_backoff_seconds": 10.0,
+    "request_timeout_seconds": 120,
+    "upload_chunk_size_mb": 4,
+    "stop_on_error": false,
+    "skip_published": true,
+    "dedupe_by_fingerprint": false,
+    "verify_after_upload": true
+  },
+
+  "content": {
+    "cover_preference": "4x3",
+    "copy_file": "发布.md",
+    "default_topics": ["少儿科普", "白版", "涨知识"],
+    "append_topics": true,
+    "activity": "白版说知边看边学",
+    "activity_keyword": "白版",
+    "title_max_length": 30,
+    "description_max_length": 1000
+  },
+
+  "limits": {
+    "max_video_size_mb": 2048,
+    "min_video_size_kb": 10,
+    "max_cover_size_mb": 20,
+    "max_topics": 20
+  },
+
+  "state_file": "state/publish_state.json",
+  "log_dir": "logs",
+  "report_dir": "reports",
+
+  "credentials": {
+    "openapi": {
+      "base_url": "",
+      "appid": "",
+      "secret": "",
+      "access_token": "",
+      "token_endpoint": "/cgi-bin/token",
+      "upload_endpoint": "/cgi-bin/material/add_material",
+      "publish_endpoint": "/cgi-bin/freepublish/submit",
+      "media_field": "media",
+      "upload_type": "video",
+      "timeout": 120,
+      "verify_tls": true
+    },
+    "channels_web": {
+      "storage_state": "state/channels_storage.json",
+      "channel": "chrome",
+      "headless": true,
+      "no_proxy": true,
+      "slow_mo_ms": 120,
+      "upload_timeout_ms": 900000,
+      "qr_path": "state/login_qr.png",
+      "publish_mode": "scheduled",
+      "stealth": true,
+      "preflight_check": true,
+      "upload_stall_timeout_ms": 90000,
+      "upload_start_timeout_ms": 120000
+    }
+  }
+}
