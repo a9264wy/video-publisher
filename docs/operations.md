@@ -57,17 +57,32 @@ python -m venv .venv
 ## 5. 发布后核验（三件套，缺一不可）
 
 ```bash
-# ① 接口层：拦截管理页 post_list 响应，列定时作品 objectId/status
-.venv/Scripts/python.exe scripts/find_scheduled.py
+# ① 权威核验（分页拉全，推荐）：定时清单 + 每条的定时时间
+.venv/Scripts/python.exe scripts/verify_all_scheduled.py
 
-# ② UI 层：回读管理页卡片「将于XXXX年XX月XX日 08:00发表」
+# ② UI 层：回读当前**第一页**卡片「将于XXXX年XX月XX日 08:00发表」
 .venv/Scripts/python.exe scripts/verify_schedule_ui.py
 
 # ③ 提交侧：看每次提交后的页面快照
 cat state/submit_dumps/submit_after.json
 ```
 
-② 的数量与「将于」时间必须与排期表逐条一致；① 的 objectId 是删除操作的凭据。
+### ⚠️ 核验陷阱：只看第一页会误判「条目消失」
+
+管理页 UI 与 `find_scheduled.py`（拦页面自身响应）**都只覆盖第一页 20 条**。
+新批次发布后，旧条目会被挤到第二页，看起来像「不见了」——2026-10-15 就被这个
+虚惊过一次（当时以为 10-16~10-19 的 10 条丢了）。
+
+**判断定时作品必须用 `verify_all_scheduled.py`**，它按 `currentPage/pageSize`
+翻页拉全（接口 `totalCount` 一并带出）。
+
+### 接口字段备忘
+
+- 定时发表时间字段是 **`effectiveTime`**（Unix 秒），不是 `publishTime`；
+  **无 `effectiveTime` = 已发表**（或非定时对象）。
+- `status` 恒为 1，**不能**用它区分定时/已发表，要看 `effectiveTime` 是否在未来。
+- `find_scheduled.py` 的用途是拿定时作品的 **objectId**（删除凭据），
+  条目标题在 `desc.shortTitle[0].shortTitle`。
 
 ## 6. 人工预览
 

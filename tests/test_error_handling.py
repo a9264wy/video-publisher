@@ -1167,5 +1167,44 @@ class UploadGateTests(unittest.TestCase):
         self.assertEqual(cfg.content.activity, "白版说知边看边学")
 
 
+class LoginCookieGuardTests(unittest.TestCase):
+    """源码级护栏：走扫码分支前必须清 cookie，否则永远等不到扫码。
+
+    踩过的坑：登录态过期后 ``login()`` 回退到扫码分支，但残留的过期 cookie
+    没被清掉，扫码等待循环第一轮 ``_has_login_cookie(ctx)`` 就为真 → 立刻
+    跳出「已扫码」→ 只等 40s 就报 ``not_redirected``。用户全程没机会扫码，
+    连续三次失败（2026-10-15 实测）。
+    """
+
+    SRC = None
+
+    @classmethod
+    def setUpClass(cls):
+        cls.SRC = (ROOT / "videopub" / "backends" / "channels_web.py").read_text(encoding="utf-8")
+
+    def _login_body(self) -> str:
+        """截出 login() 方法体（到下一个同缩进 def 为止）。"""
+        start = self.SRC.index("    def login(")
+        rest = self.SRC[start + 1:]
+        end = rest.index("\n    def ", 1)
+        return self.SRC[start:start + 1 + end]
+
+    def test_login_clears_cookies_on_every_scan_path(self):
+        """清 cookie 不能只在 force 分支：失效回退分支同样必须清。"""
+        body = self._login_body()
+        self.assertIn("ctx.clear_cookies()", body)
+        clear_idx = body.index("ctx.clear_cookies()")
+        # 关键：清理必须发生在「等待扫码」的循环之前，且不受 force 条件约束
+        wait_idx = body.index("while time.time() < deadline:")
+        self.assertLess(clear_idx, wait_idx)
+        guard_start = max(0, clear_idx - 200)
+        self.assertNotIn("if force:", body[guard_start:clear_idx])
+
+    def test_login_cookie_detection_is_not_optimistic(self):
+        """等待循环必须真的靠扫码拿到 cookie，不能被残留 cookie 骗过。"""
+        body = self._login_body()
+        self.assertIn("if self._has_login_cookie(ctx):", body)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

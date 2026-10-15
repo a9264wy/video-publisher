@@ -421,12 +421,14 @@ class ChannelsWebBackend(PublishBackend):
         ctx = self._launch(headless=False)
         page = self._page or (ctx.pages[0] if ctx.pages else ctx.new_page())
         try:
-            # 强制重登：先清掉可能存在的旧登录态，否则会直接进后台、看不到二维码
-            if force:
-                try:
-                    ctx.clear_cookies()
-                except Exception:
-                    pass
+            # 能走到这里，说明没有**可用**登录态（首次登录 / 旧态失效 / force 重登），
+            # 所以一律先清 cookie。必须清：残留的过期 cookie 会让下面的扫码等待循环
+            # 立刻判定「已扫码」跳出，只等 40s 就报 not_redirected —— 实测连续踩 3 次，
+            # 用户根本没机会扫二维码（首次登录与 force 分支原本是清的，漏了失效回退分支）。
+            try:
+                ctx.clear_cookies()
+            except Exception:
+                pass
             page.goto(HOME_URL, wait_until="domcontentloaded", timeout=60_000)
         except Exception as exc:
             log.warning("打开视频号助手失败（继续尝试）：%s", exc)
