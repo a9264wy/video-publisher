@@ -1710,6 +1710,24 @@ class ChannelsWebBackend(PublishBackend):
             except Exception:
                 continue
 
+    def _scroll_cover_into_view(self, page) -> None:
+        """把封面卡片区滚回视口中央。
+
+        实测（2026-10-17）：参加过活动 / 填完描述后，页面（iframe 内）被自动
+        滚走，「编辑」按钮 rect 的 y 从 185 变成 -363 —— 坐标已失效，
+        mouse.click 落在视口外的空白处，弹窗文本恒为空、三步重试全废。
+        滚回视口再收坐标即可恢复。最小流程不触发滚动，所以一直没暴露。
+        """
+        for f in self._frames(page):
+            try:
+                f.evaluate("""() => {
+                  const el = document.querySelector('.vertical-cover-wrap')
+                          || document.querySelector('.horizon-cover-wrap');
+                  if (el) el.scrollIntoView({block: 'center', behavior: 'instant'});
+                }""")
+            except Exception:
+                continue
+
     # 收集所有可见「编辑」按钮：坐标 + 归属卡片文本。
     # 同时走主文档/shadow 与 iframe 副本（同一按钮两份，坐标相同，
     # 点坐标即命中渲染在上面的活副本）；iframe 坐标要叠加 iframe 自身位置。
@@ -1778,6 +1796,17 @@ class ChannelsWebBackend(PublishBackend):
         """
         cx = rect[0] + rect[2] // 2
         cy = rect[1] + rect[3] // 2
+        # 坐标失效防护：前置步骤可能把页面滚走（按钮 y 变负），
+        # 此时点击落在视口外空白处，弹窗永远为空。滚回去让外层重收坐标。
+        try:
+            vh = (page.viewport_size or {}).get("height", 900)
+        except Exception:
+            vh = 900
+        if cy < 0 or cy > vh:
+            log.warning("封面按钮坐标 %d 在视口外（视口高 %d），先滚回封面区再试", cy, vh)
+            self._scroll_cover_into_view(page)
+            page.wait_for_timeout(600)
+            return ""
         try:
             page.mouse.move(cx, cy)
             page.wait_for_timeout(800)  # 等 :hover 弹层渲染出来
@@ -1785,10 +1814,28 @@ class ChannelsWebBackend(PublishBackend):
         except Exception as exc:  # noqa: BLE001
             log.warning("封面编辑点击异常：%s", exc)
             return ""
-        page.wait_for_timeout(1_500)
-        text = self._visible_cover_dialog_text(page)
-        if text:
-            return text
+        # 弹窗可能因网络慢而延迟渲染，轮询等待，别只探一次就判失败
+        text = ""
+        for _ in range(8):  # 8 × 500ms ≈ 4s
+            page.wait_for_timeout(500)
+            text = self._visible_cover_dialog_text(page)
+            if text:
+                return text
+        # 兜底：把鼠标移开再移回，强制重新触发 :hover 后再点一次
+        #（残留遮罩/浮层会吃掉第一次点击，2026-10-17 实测）
+        try:
+            page.mouse.move(20, 20)
+            page.wait_for_timeout(400)
+            page.mouse.move(cx, cy)
+            page.wait_for_timeout(900)
+            page.mouse.click(cx, cy)
+            page.wait_for_timeout(1_500)
+            text = self._visible_cover_dialog_text(page)
+            if text:
+                log.info("二次 hover 点击后封面弹窗已打开")
+                return text
+        except Exception as exc:  # noqa: BLE001
+            log.warning("封面编辑二次点击异常：%s", exc)
         # 平台拦截：「使用此素材作为封面?」→ 点「直接编辑」进真弹窗
         if self._click_first_visible(
                 page, ["button:has-text('直接编辑')",
@@ -1820,6 +1867,12 @@ class ChannelsWebBackend(PublishBackend):
 
         dialog_text = ""
         for attempt in (1, 2, 3):  # 第一张卡编辑完后预览区会重渲染，候选需要重新收集
+            # 每轮先清场 + 把封面区滚回视口：前置步骤（活动下拉/位置选择器）
+            # 会把页面滚走导致坐标失效；残留浮层或全屏遮罩也会吃掉封面点击
+            # （2026-10-17 实测：参加过活动后按钮 y 变负，点击落空、弹窗恒空）
+            self._scroll_cover_into_view(page)
+            self._escape_all_frames(page)
+            page.wait_for_timeout(500)
             targets = self._cover_edit_targets(page)
             if not targets:
                 log.warning("封面「编辑」按钮始终未渲染（%s，第 %d 轮）", slot, attempt)

@@ -80,6 +80,27 @@ img-popover 浮层。`locator.click(force=True)` 对 4:3 卡无效（:hover 未�
 
 封面编辑弹窗在 post/create iframe 内，`_visible_cover_dialog_text` 必须 **iframe 优先扫**。
 
+### 根因三：前置步骤把页面滚走 → 封面坐标失效（2026-10-17）
+
+**症状**：完整 publish 流（填描述 → 参加活动 → 清位置 → 设封面）里，
+两张卡的「编辑」都点不开——弹窗文本恒为空、3 轮重试全废；
+而同样的代码在「最小流程」（不填描述、不选活动）里 100% 成功。
+
+**根因**：参加过活动 / 填完描述后，**iframe 内页面被自动滚走**，
+「编辑」按钮 rect 的 y 从 185 变成 **-363**（视口外）。`mouse.click` 落在
+视口外的空白处，什么都不发生。dump 方法：`scripts/test_cover_flow.py --full --dump`
+会打印每步后的按钮 rect / elementFromPoint 命中链 / 全屏浮层清单——
+正是它抓到了 y 变负。
+
+**注意**：主文档常驻一个 `div.mask`（`post-preview-wrap` 内，1440x900 全屏，
+`z-index=auto`），**它不挡封面点击**（最小流程里有它也能成功），
+别被它带偏——真正的差异是按钮坐标。
+
+**修复**：`_set_cover_card` 每轮开头 `_scroll_cover_into_view`（把
+`.vertical-cover-wrap` scrollIntoView 到视口中央）再收坐标；
+`_hover_click_cover_edit` 加坐标有效性防护（cy<0 或 cy>视口高 → 先滚回去
+返回空，让外层重收）。
+
 ### 上传完成判据（曾经判错导致假成功）
 
 - 唯一判据 = **可见的「取消上传」**（`_has_visible`，`count()` 必须配 `is_visible()`，
